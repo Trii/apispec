@@ -38,6 +38,34 @@ def clean_operations(operations):
             operation['parameters'] = [get_ref(p) for p in parameters]
 
 
+class PathDict(dict):
+    def __init__(self, **kwargs):
+        self.base_path = kwargs.pop('base_path', None)
+        super(PathDict, self).__init__(**kwargs)
+
+    def __setitem__(self, key, value):
+        super(PathDict, self).__setitem__(self._strip_base_path(key), value)
+
+    def setdefault(self, key, default=None):
+        return super(PathDict, self).setdefault(self._strip_base_path(key), default)
+
+    def _strip_base_path(self, path):
+        if self.base_path is not None:
+            pattern = '^{0}'.format(re.escape(self.base_path))
+            path = re.sub(pattern, '', path)
+        return path
+
+
+class APIPaths(object):
+    """Non-Data descriptor for stripping `basePath` on access"""
+    def __get__(self, instance, owner=None):
+        """Sets up the basePath removal"""
+        if not hasattr(instance, '_apipaths'):
+            setattr(instance, '_apipaths', PathDict())
+        getattr(instance, '_apipaths').base_path = instance.options.get('basePath')
+        return getattr(instance, '_apipaths')
+
+
 class Path(dict):
     """Represents a Swagger Path object.
 
@@ -88,6 +116,8 @@ class APISpec(object):
         See https://github.com/swagger-api/swagger-spec/blob/master/versions/2.0.md#swagger-object
     """
 
+    _paths = APIPaths()
+
     def __init__(self, title, version, plugins=(), info=None, **options):
         self.info = {
             'title': title,
@@ -98,7 +128,7 @@ class APISpec(object):
         # Metadata
         self._definitions = {}
         self._parameters = {}
-        self._paths = {}
+        # self._paths = PathDict(base_path=options.get('basePath', None))
         # Plugin and helpers
         self.plugins = {}
         self._definition_helpers = []
@@ -141,16 +171,8 @@ class APISpec(object):
         :param dict|None operations: describes the http methods and options for `path`
         :param dict kwargs: parameters used by any path helpers see :meth:`register_path_helper`
         """
-        p = path
-        if isinstance(path, Path):
-            p = path.path
-        if p and 'basePath' in self.options:
-            pattern = '^{0}'.format(re.escape(self.options['basePath']))
-            p = re.sub(pattern, '', p)
-        if isinstance(path, Path):
-            path.path = p
-        else:
-            path = Path(path=p, operations=operations)
+        if not isinstance(path, Path):
+            path = Path(path=path, operations=operations)
         # Execute plugins' helpers
         for func in self._path_helpers:
             try:
