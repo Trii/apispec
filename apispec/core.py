@@ -128,7 +128,6 @@ class APISpec(object):
         # Metadata
         self._definitions = {}
         self._parameters = {}
-        # self._paths = PathDict(base_path=options.get('basePath', None))
         # Plugin and helpers
         self.plugins = {}
         self._definition_helpers = []
